@@ -978,14 +978,17 @@ const PlanningView: React.FC<{
 };
 
 // Replaced simple TrainingView with comprehensive Resource Hub
-const TrainingView: React.FC<{ resources: TrainingResource[]; initialTab?: 'learn' | 'inspire' | 'expert'; profile: StudentProfile }> = ({ resources, initialTab = 'learn', profile }) => {
+const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: SampleProfile[]; initialTab?: 'learn' | 'inspire' | 'expert'; profile: StudentProfile }> = ({ resources, sampleProfiles, initialTab = 'learn', profile }) => {
     const [tab, setTab] = useState<'learn' | 'inspire' | 'expert'>(initialTab);
     const [selectedProfile, setSelectedProfile] = useState<SampleProfile | null>(null);
+    const [successStories, setSuccessStories] = useState<SampleProfile[]>([]);
     const [bookingCounselor, setBookingCounselor] = useState<HumanCounselor | null>(null);
     const [bookingStep, setBookingStep] = useState<'select' | 'success'>('select');
     const [selectedSlot, setSelectedSlot] = useState<string>('');
     const [selectedResource, setSelectedResource] = useState<TrainingResource | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [storySearchTerm, setStorySearchTerm] = useState('');
+    const [storySearching, setStorySearching] = useState(false);
     const [filteredResources, setFilteredResources] = useState<TrainingResource[]>(resources);
     const [hasSearched, setHasSearched] = useState(false);
     const [searching, setSearching] = useState(false);
@@ -1011,6 +1014,10 @@ const TrainingView: React.FC<{ resources: TrainingResource[]; initialTab?: 'lear
         }
         // This effect runs when resources change, ensuring the initial list is populated.
     }, [resources]);
+
+    useEffect(() => {
+        setSuccessStories([]);
+    }, [sampleProfiles]);
 
     // Reset flow when modal closes
     const closeBooking = () => {
@@ -1234,8 +1241,28 @@ const TrainingView: React.FC<{ resources: TrainingResource[]; initialTab?: 'lear
 
                 {tab === 'inspire' && (
                     <div className="space-y-4">
+                        <div className="flex gap-2 items-center">
+                            <button 
+                                onClick={async () => {
+                                    setStorySearching(true);
+                                    const stories = await Gemini.findSuccessStories('top universities', profile);
+                                    setSuccessStories(stories as SampleProfile[]);
+                                    setStorySearching(false);
+                                }}
+                                className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300"
+                                disabled={storySearching}
+                            >
+                                {storySearching ? 'Finding...' : 'Find'}
+                            </button>
+                        </div>
                         <div className="mb-2 text-xs text-gray-500 uppercase font-bold tracking-wider">Historical Admitted Profiles</div>
-                        {MOCK_SAMPLE_PROFILES.map(profile => (
+                        {storySearching ? (
+                            <div className="text-sm text-gray-500 text-center p-4">Searching for stories...</div>
+                        ) : successStories.length === 0 ? (
+                            <div className="text-sm text-gray-500 bg-white border border-dashed border-gray-200 rounded-xl p-4 text-center">
+                                No success stories found. Try a different search.
+                            </div>
+                        ) : successStories.map(profile => (
                             <div key={profile.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                                 <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white">
                                     <div className="flex justify-between items-start">
@@ -1474,7 +1501,7 @@ const App: React.FC = () => {
   const handleAnalysis = async () => {
       setIsTyping(true);
       const result = await Gemini.analyzeProfile(profile);
-      setProfile({ ...profile, aiAnalysis: result });
+      setProfile(prev => ({ ...prev, aiAnalysis: result }));
       setIsTyping(false);
   };
 
@@ -2004,7 +2031,7 @@ const App: React.FC = () => {
        )}
 
        {view === AppView.TRAINING && (
-           <TrainingView resources={MOCK_TRAINING} initialTab={trainingTab} profile={profile} />
+           <TrainingView resources={MOCK_TRAINING} sampleProfiles={MOCK_SAMPLE_PROFILES} initialTab={trainingTab} profile={profile} />
        )}
 
        {view === AppView.INTERVIEW && (

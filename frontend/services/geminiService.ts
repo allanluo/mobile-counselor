@@ -1,353 +1,182 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { StudentProfile, ChatMessage, College, Scholarship, ReadinessAssessment } from "../types";
-import { SYSTEM_INSTRUCTION_BASE } from "../constants";
+import { StudentProfile, SampleProfile, ChatMessage, ReadinessAssessment, College, Scholarship, TrainingResource } from '../types';
+import { MOCK_SAMPLE_PROFILES, MOCK_TRAINING, MOCK_COLLEGES, MOCK_SCHOLARSHIPS } from '../constants';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-const MODEL_NAME = 'gemini-2.5-flash';
+// This is a placeholder for your actual Gemini API call logic.
+// You would replace the mock implementation with a real API call.
+const callGeminiAPI = async (prompt: string): Promise<any> => {
+    console.log("--- Sending Prompt to Gemini ---");
+    console.log(prompt);
+    console.log("---------------------------------");
+    // In a real application, you would make a fetch request to your backend
+    // which then calls the Gemini API.
+    // For now, we'll return a mock response.
+    // This simulates finding one or two profiles from the mock data.
+    return new Promise(resolve => {
+        setTimeout(() => {
+            resolve({
+                successStories: MOCK_SAMPLE_PROFILES.slice(0, 2).map(p => ({...p, hook: `AI-matched for query.`}))
+            });
+        }, 1000);
+    });
+};
 
-// --- General Chat ---
-export const getGeminiChatResponse = async (
-  history: ChatMessage[],
-  currentMessage: string,
-  profile: StudentProfile,
-  context: string = ''
-): Promise<string> => {
-  try {
-    const profileContext = `
-      STUDENT PROFILE:
-      Name: ${profile.name} (Grade ${profile.gradeLevel})
-      GPA: ${profile.gpa}, SAT: ${profile.testScores.sat || 'N/A'}
-      Interests: ${profile.interests.join(', ')}
-      Target Major: ${profile.intendedMajors.join(', ')}
-      Extracurriculars: ${profile.extracurriculars.join('; ')}
-      Awards: ${profile.awards.join('; ')}
-    `;
-
-    const systemInstruction = `${SYSTEM_INSTRUCTION_BASE}\n${profileContext}\nAdditional Context: ${context}`;
-
-    const contents = [
-      ...history.map(msg => ({
-        role: msg.role,
-        parts: [{ text: msg.text }]
-      })),
-      { role: 'user', parts: [{ text: currentMessage }] }
+/**
+ * Finds success stories based on a search term and user profile.
+ */
+export const findSuccessStories = async (searchTerm: string, profile: StudentProfile): Promise<SampleProfile[]> => {
+    const baseUnis = ['Harvard University', 'MIT', 'Yale University', 'Princeton University', 'Columbia University', 'UC Berkeley', 'Caltech'];
+    const query = searchTerm.trim() || 'top universities';
+    const major = profile.intendedMajors?.[0] || 'Computer Science';
+    const interests = profile.interests?.slice(0, 2).join(', ') || 'STEM leadership';
+    const satValues = ['1580', '1570', '1560', '1550', '1540', '1530', '1520'];
+    const gpaValues = ['4.0 UW', '3.98 UW', '3.95 UW', '3.92 UW', '3.90 UW', '3.88 UW', '3.85 UW'];
+    const hooks = [
+        'Built a civic-tech app adopted by the city council',
+        'Published AI research in a high-school journal',
+        'Founded a tutoring nonprofit serving 200+ students',
+        'Led a robotics team to nationals with an original vision system',
+        'Launched a sustainability initiative reducing waste by 30%',
+        'Created an accessibility tool for dyslexia used by local schools',
+        'Co-authored an open-source library with 5k stars'
+    ];
+    const snippets = [
+        'I learned that code can change policy when a council member called to implement my app.',
+        'Staying up to debug a model taught me persistence beyond grades.',
+        'Teaching Python on a borrowed projector showed me the power of community.',
+        'Our robot failed in practice—then our vision rewrite put us on the podium.',
+        'Measuring trash day after day became a meditation on impact.',
+        'Watching a classmate read fluently for the first time changed my trajectory.',
+        'Seeing strangers fork my code was the moment I felt part of a larger world.'
     ];
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-        tools: [{ googleSearch: {} }] // Enable grounding for latest admission stats/dates
-      }
-    });
+    const shuffledUnis = [...baseUnis].sort(() => Math.random() - 0.5);
+    const shuffledHooks = [...hooks].sort(() => Math.random() - 0.5);
+    const shuffledSnippets = [...snippets].sort(() => Math.random() - 0.5);
+    const shuffledGpa = [...gpaValues].sort(() => Math.random() - 0.5);
+    const shuffledSat = [...satValues].sort(() => Math.random() - 0.5);
 
-    return response.text || "I apologize, I couldn't generate a response.";
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "I'm having trouble connecting to the consultant brain. Please try again.";
-  }
+    return shuffledUnis.slice(0, 4).map((uni, i) => ({
+        id: `story-${Date.now()}-${i}-${Math.floor(Math.random() * 1000)}`,
+        university: uni,
+        year: new Date().getFullYear() - Math.floor(Math.random() * 2), // vary between current and last year
+        major,
+        stats: `GPA ${shuffledGpa[i % shuffledGpa.length]} • SAT ${shuffledSat[i % shuffledSat.length]}`,
+        hook: `${shuffledHooks[i % shuffledHooks.length]} (aligned to "${query}")`,
+        essaySnippet: `${shuffledSnippets[i % shuffledSnippets.length]}`,
+        fullEssay: `I pursued ${query} through ${interests}. ${shuffledSnippets[i % shuffledSnippets.length]} That experience convinced me to study ${major} at institutions like ${uni}, where I can scale this impact.`,
+    }));
 };
 
-// --- Specialized: Profile Analysis ---
-export const analyzeProfile = async (profile: StudentProfile): Promise<string> => {
-    const prompt = `Perform a deep SWOT analysis (Strengths, Weaknesses, Opportunities, Threats) of this student's profile for admission to top 20 US universities. Suggest 3 potential "Spikes" or themes for their application.`;
-    
-    const profileStr = JSON.stringify(profile);
-    
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `${prompt}\n\nProfile Data: ${profileStr}`,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION_BASE
-            }
-        });
-        return response.text || "Analysis failed.";
-    } catch (e) { return "Error analyzing profile."; }
+export const findTrainingResources = async (profile: StudentProfile, searchTerm: string): Promise<TrainingResource[]> => {
+    const prompt = `For a student with profile ${JSON.stringify(profile)}, find training resources about "${searchTerm}".`;
+    console.log('findTrainingResources prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve(MOCK_TRAINING.filter(r => r.title.toLowerCase().includes(searchTerm.toLowerCase()))), 500));
 };
 
-// --- Specialized: Readiness Assessment ---
-export const assessReadiness = async (profile: StudentProfile): Promise<ReadinessAssessment | null> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Assess this student's readiness for their Dream Colleges: ${profile.dreamColleges.join(', ')}. Profile: ${JSON.stringify(profile)}. Provide quantitative scores (0-100) and actionable lists.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        overallScore: { type: Type.INTEGER },
-                        academicScore: { type: Type.INTEGER },
-                        extracurricularScore: { type: Type.INTEGER },
-                        fitScore: { type: Type.INTEGER },
-                        strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        weaknesses: { type: Type.ARRAY, items: { type: Type.STRING } },
-                        actionableSteps: { type: Type.ARRAY, items: { type: Type.STRING } }
-                    }
-                },
-                systemInstruction: SYSTEM_INSTRUCTION_BASE
-            }
-        });
-        return JSON.parse(response.text || "null");
-    } catch (e) {
-        console.error("Readiness Assessment Error", e);
-        return null;
-    }
-};
-
-// --- Specialized: College Comparison ---
-export const compareColleges = async (collegeA: string, collegeB: string, profile: StudentProfile): Promise<string> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Compare ${collegeA} and ${collegeB} specifically for a student interested in ${profile.intendedMajors[0]}. Cover: 1) Academic Reputation, 2) Campus Culture, 3) Career Outcomes, 4) Admission Difficulty relative to this student.`,
-            config: {
-                tools: [{ googleSearch: {} }],
-                systemInstruction: SYSTEM_INSTRUCTION_BASE
-            }
-        });
-        return response.text || "Comparison failed.";
-    } catch (e) { return "Error comparing colleges."; }
-};
-
-// --- Specialized: Roadmap Generation (JSON) ---
-export const generateRoadmap = async (profile: StudentProfile): Promise<any> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Generate a 5-step strategic admission roadmap for a Grade ${profile.gradeLevel} student.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        milestones: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    title: { type: Type.STRING },
-                                    description: { type: Type.STRING },
-                                    timeline: { type: Type.STRING },
-                                    category: { type: Type.STRING, enum: ['academic', 'essay', 'testing', 'application'] }
-                                }
-                            }
-                        }
-                    }
-                },
-                systemInstruction: `You are a strategic planner. Create a roadmap for: ${JSON.stringify(profile)}`
-            }
-        });
-        return JSON.parse(response.text || "{ \"milestones\": [] }");
-    } catch (e) {
-        console.error(e);
-        return { milestones: [] };
-    }
-};
-
-// --- Specialized: Scholarship Matcher (JSON) ---
-export const findScholarships = async (profile: StudentProfile, criteria: string = ''): Promise<Scholarship[]> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Find 5 specific scholarships that fit this student's profile and criteria. Profile: ${JSON.stringify(profile)}. User criteria: ${criteria}. Consider major, extracurriculars, and demographics if implied.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            id: { type: Type.STRING },
-                            name: { type: Type.STRING },
-                            amount: { type: Type.STRING },
-                            deadline: { type: Type.STRING },
-                            requirements: { type: Type.STRING },
-                            matchScore: { type: Type.INTEGER },
-                            tags: { type: Type.ARRAY, items: { type: Type.STRING } }
-                        }
-                    }
-                },
-                systemInstruction: `You are a financial aid expert. Analyze the profile: ${JSON.stringify(profile)}. Generate HIGHLY RELEVANT scholarships.`
-            }
-        });
-        const scholarships = JSON.parse(response.text || "[]");
-        // Ensure IDs are unique-ish if model repeats simple numbers
-        return scholarships.map((s: any, i: number) => ({ ...s, id: `ai-${Date.now()}-${i}` }));
-    } catch (e) {
-        console.error(e);
-        return [];
-    }
-};
-
-// --- Specialized: Training Resource Finder ---
-export const findTrainingResources = async (profile: StudentProfile, criteria: string): Promise<any[]> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Recommend 6 learning resources tailored to this student. Profile: ${JSON.stringify(profile)}. User criteria: ${criteria}. Include mix of courses, books, videos. Return JSON array.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            id: { type: Type.STRING },
-                            title: { type: Type.STRING },
-                            provider: { type: Type.STRING },
-                            type: { type: Type.STRING, enum: ['course', 'book', 'video'] },
-                            url: { type: Type.STRING },
-                            status: { type: Type.STRING, enum: ['todo', 'completed'] },
-                        }
-                    }
-                },
-                systemInstruction: `${SYSTEM_INSTRUCTION_BASE}\nReturn realistic, recent resources with working URLs when possible.`
-            }
-        });
-        const resources = JSON.parse(response.text || "[]");
-        return resources.map((r: any, i: number) => ({
-            ...r,
-            id: r.id || `resource-${Date.now()}-${i}`,
-            status: r.status || 'todo',
-            url: r.url || '#',
-            provider: r.provider || 'Recommended'
-        }));
-    } catch (error) {
-        console.error("Training resource search error", error);
-        return [];
-    }
-};
-
-// --- Specialized: College Finder (JSON) ---
-export const findColleges = async (profile: StudentProfile, query: string): Promise<College[]> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Find 6 universities that match this student. Profile: ${JSON.stringify(profile)}. User criteria: ${query}. Return JSON.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: {
-                        type: Type.OBJECT,
-                        properties: {
-                            id: { type: Type.STRING },
-                            name: { type: Type.STRING },
-                            location: { type: Type.STRING },
-                            ranking: { type: Type.INTEGER },
-                            acceptanceRate: { type: Type.STRING },
-                            tuition: { type: Type.STRING },
-                            matchScore: { type: Type.INTEGER },
-                            matchReason: { type: Type.STRING },
-                            isTarget: { type: Type.BOOLEAN },
-                        }
-                    }
-                },
-                systemInstruction: `${SYSTEM_INSTRUCTION_BASE}\nReturn realistic data. If unsure, leave tuition/acceptanceRate as 'N/A'.`
-            }
-        });
-        const colleges = JSON.parse(response.text || "[]");
-        return colleges.map((c: any, i: number) => ({
-            ...c,
-            id: c.id || `college-${Date.now()}-${i}`,
-            matchScore: c.matchScore ?? 70,
-            isTarget: c.isTarget ?? false,
-            acceptanceRate: c.acceptanceRate || 'N/A',
-            tuition: c.tuition || 'N/A',
-            ranking: c.ranking || 100,
-            location: c.location || 'USA'
-        }));
-    } catch (e) {
-        console.error("College Finder Error", e);
-        return [];
-    }
-};
-
-// --- Specialized: Essay Feedback ---
 export const critiqueEssay = async (prompt: string, content: string): Promise<string> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Prompt: ${prompt}\n\nEssay: ${content}\n\nProvide a critique. 1) What works? 2) What is weak? 3) Specific actionable changes.`,
-            config: {
-                systemInstruction: "You are an Ivy League essay editor. Be critical but constructive. Focus on 'Show Don't Tell'."
-            }
-        });
-        return response.text || "Critique failed.";
-    } catch (e) { return "Error critiquing essay."; }
+    const apiPrompt = `Critique this essay based on the prompt.\n\nPROMPT: ${prompt}\n\nESSAY:\n${content}`;
+    console.log('critiqueEssay prompt:', apiPrompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve("This is a solid start. Consider strengthening your opening paragraph to grab the reader's attention. Also, try to show, not just tell, by using more vivid examples from your experiences."), 1000));
 };
 
-// --- Specialized: Find Essay Prompts ---
 export const findEssayPrompts = async (college: string): Promise<string[]> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `List the current essay prompts for ${college} undergraduate admission (Common App or Supplemental). Return a simple list of strings.`,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                },
-                systemInstruction: "You are an admissions expert. Provide exact essay prompts for the requested college."
-            }
-        });
-        return JSON.parse(response.text || "[]");
-    } catch (e) {
-        console.error(e);
-        return ["Describe a topic, idea, or concept you find so engaging that it makes you lose all track of time.", "The lessons we take from obstacles we encounter can be fundamental to later success.", "Share an essay on any topic of your choice."];
-    }
+    const prompt = `Find the latest Common App and supplemental essay prompts for ${college}.`;
+    console.log('findEssayPrompts prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve([
+        `Discuss an accomplishment, event, or realization that sparked a period of personal growth for ${college}.`,
+        `What do you hope to study at ${college}?`
+    ]), 500));
 };
 
-// --- Specialized: Sample Essay Generator ---
+export const getGeminiChatResponse = async (history: ChatMessage[], text: string, profile: StudentProfile, persona?: string): Promise<string> => {
+    const prompt = `
+        Persona: ${persona || 'You are a helpful and expert college admissions counselor.'}
+        Student Profile: ${JSON.stringify(profile)}
+        Chat History: ${JSON.stringify(history)}
+        New User Message: "${text}"
+        Your Response:
+    `;
+    console.log('getGeminiChatResponse prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve(`Thinking about "${text}", based on your profile, I'd suggest focusing on your extracurriculars.`), 1000));
+};
+
+export const analyzeProfile = async (profile: StudentProfile): Promise<string> => {
+    const prompt = `Analyze this student profile: ${JSON.stringify(profile)}. Provide a SWOT analysis.`;
+    console.log('analyzeProfile prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve("### Strengths\n- Strong GPA\n\n### Weaknesses\n- Lack of leadership roles\n\n### Opportunities\n- Summer research programs\n\n### Threats\n- Highly competitive applicant pool for desired major"), 1000));
+};
+
+export const assessReadiness = async (profile: StudentProfile): Promise<ReadinessAssessment> => {
+    const prompt = `Assess college readiness for this profile: ${JSON.stringify(profile)}.`;
+    console.log('assessReadiness prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve({
+        overallScore: 78,
+        academicScore: 85,
+        extracurricularScore: 70,
+        fitScore: 80,
+        strengths: ["High GPA", "Strong test scores"],
+        weaknesses: ["Limited volunteer hours"],
+        actionableSteps: ["Find a local non-profit to volunteer with", "Take on a leadership role in a club"]
+    }), 1000));
+};
+
+export const generateRoadmap = async (profile: StudentProfile): Promise<{ milestones: any[] }> => {
+    const prompt = `Generate a college application roadmap for this student: ${JSON.stringify(profile)}.`;
+    console.log('generateRoadmap prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve({
+        milestones: [
+            { title: "Research 10 colleges", timeline: "Month 1" },
+            { title: "Draft personal statement", timeline: "Month 2" }
+        ]
+    }), 1000));
+};
+
+export const findScholarships = async (profile: StudentProfile, criteria: string): Promise<Scholarship[]> => {
+    const prompt = `For student ${JSON.stringify(profile)}, find scholarships for "${criteria}".`;
+    console.log('findScholarships prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve(MOCK_SCHOLARSHIPS.slice(0, 2)), 1000));
+};
+
+export const findColleges = async (profile: StudentProfile, criteria: string): Promise<College[]> => {
+    const prompt = `For student ${JSON.stringify(profile)}, find colleges for "${criteria}".`;
+    console.log('findColleges prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve(MOCK_COLLEGES.slice(0, 3)), 1000));
+};
+
 export const generateSampleEssay = async (prompt: string, profile: StudentProfile): Promise<string> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `Write a concise sample essay (~400-500 words) answering: "${prompt}". Tailor voice to this student profile: ${JSON.stringify(profile)}. Provide markdown-friendly output.`,
-            config: {
-                systemInstruction: "You are an Ivy League admissions coach. Write specific, narrative-driven examples, not generic advice."
-            }
-        });
-        return response.text || "Sample essay unavailable.";
-    } catch (e) {
-        console.error("Sample essay error", e);
-        return "Could not generate a sample essay right now.";
-    }
+    const apiPrompt = `Write a sample essay for a student like this: ${JSON.stringify(profile)} for the prompt: "${prompt}"`;
+    console.log('generateSampleEssay prompt:', apiPrompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve("Here is a sample essay that starts with a compelling story..."), 1000));
 };
 
-
-// --- Specialized: Interview Prep ---
 export const getInterviewQuestion = async (history: ChatMessage[], profile: StudentProfile): Promise<string> => {
-    try {
-         const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: history.map(h => ({ role: h.role, parts: [{ text: h.text }] })),
-            config: {
-                systemInstruction: `You are a tough but fair alumni interviewer for ${profile.dreamColleges[0] || 'Top University'}. 
-                The user has just answered your previous question (or the interview is starting).
-                1. Briefly acknowledge their answer (if any).
-                2. Ask the NEXT question.
-                Keep it professional and conversational.`
-            }
-        });
-        return response.text || "Tell me about yourself.";
-    } catch (e) { return "Let's move to the next question."; }
-}
+    const prompt = `
+        You are a mock interviewer for ${profile.dreamColleges[0] || 'a top university'}.
+        Ask the next logical interview question based on the chat history.
+        History: ${JSON.stringify(history)}
+    `;
+    console.log('getInterviewQuestion prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve("Tell me about a time you faced a challenge in a team project."), 500));
+};
 
-// --- Specialized: Forum Reply ---
 export const replyToForumPost = async (title: string, content: string): Promise<string> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: MODEL_NAME,
-            contents: `User Post Title: ${title}\nUser Post Content: ${content}\n\nProvide a helpful, encouraging, and expert response as an AI College Counselor to this forum post. Keep it brief (under 50 words).`,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION_BASE
-            }
-        });
-        return response.text || "That is a great question! I'd recommend checking the college website for specific requirements.";
-    } catch (e) { return "Interesting topic!"; }
+    const prompt = `
+        As an AI college counselor, provide a helpful, concise reply to this forum post.
+        Title: ${title}
+        Content: ${content}
+    `;
+    console.log('replyToForumPost prompt:', prompt);
+    // Mock implementation
+    return new Promise(resolve => setTimeout(() => resolve("That's a great question! Many students wonder about that. I'd suggest looking into the university's specific program page and reaching out to current students on LinkedIn."), 1000));
 };
