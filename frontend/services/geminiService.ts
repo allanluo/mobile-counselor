@@ -148,11 +148,11 @@ export const generateRoadmap = async (profile: StudentProfile): Promise<any> => 
 };
 
 // --- Specialized: Scholarship Matcher (JSON) ---
-export const findScholarships = async (profile: StudentProfile): Promise<Scholarship[]> => {
+export const findScholarships = async (profile: StudentProfile, criteria: string = ''): Promise<Scholarship[]> => {
     try {
         const response = await ai.models.generateContent({
             model: MODEL_NAME,
-            contents: `Find 5 specific scholarships that would fit this student's profile. Consider their major (${profile.intendedMajors}), extracurriculars (${profile.extracurriculars}), and demographics if implied.`,
+            contents: `Find 5 specific scholarships that fit this student's profile and criteria. Profile: ${JSON.stringify(profile)}. User criteria: ${criteria}. Consider major, extracurriculars, and demographics if implied.`,
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -178,6 +178,90 @@ export const findScholarships = async (profile: StudentProfile): Promise<Scholar
         return scholarships.map((s: any, i: number) => ({ ...s, id: `ai-${Date.now()}-${i}` }));
     } catch (e) {
         console.error(e);
+        return [];
+    }
+};
+
+// --- Specialized: Training Resource Finder ---
+export const findTrainingResources = async (profile: StudentProfile, criteria: string): Promise<any[]> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: MODEL_NAME,
+            contents: `Recommend 6 learning resources tailored to this student. Profile: ${JSON.stringify(profile)}. User criteria: ${criteria}. Include mix of courses, books, videos. Return JSON array.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            id: { type: Type.STRING },
+                            title: { type: Type.STRING },
+                            provider: { type: Type.STRING },
+                            type: { type: Type.STRING, enum: ['course', 'book', 'video'] },
+                            url: { type: Type.STRING },
+                            status: { type: Type.STRING, enum: ['todo', 'completed'] },
+                        }
+                    }
+                },
+                systemInstruction: `${SYSTEM_INSTRUCTION_BASE}\nReturn realistic, recent resources with working URLs when possible.`
+            }
+        });
+        const resources = JSON.parse(response.text || "[]");
+        return resources.map((r: any, i: number) => ({
+            ...r,
+            id: r.id || `resource-${Date.now()}-${i}`,
+            status: r.status || 'todo',
+            url: r.url || '#',
+            provider: r.provider || 'Recommended'
+        }));
+    } catch (error) {
+        console.error("Training resource search error", error);
+        return [];
+    }
+};
+
+// --- Specialized: College Finder (JSON) ---
+export const findColleges = async (profile: StudentProfile, query: string): Promise<College[]> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: MODEL_NAME,
+            contents: `Find 6 universities that match this student. Profile: ${JSON.stringify(profile)}. User criteria: ${query}. Return JSON.`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            id: { type: Type.STRING },
+                            name: { type: Type.STRING },
+                            location: { type: Type.STRING },
+                            ranking: { type: Type.INTEGER },
+                            acceptanceRate: { type: Type.STRING },
+                            tuition: { type: Type.STRING },
+                            matchScore: { type: Type.INTEGER },
+                            matchReason: { type: Type.STRING },
+                            isTarget: { type: Type.BOOLEAN },
+                        }
+                    }
+                },
+                systemInstruction: `${SYSTEM_INSTRUCTION_BASE}\nReturn realistic data. If unsure, leave tuition/acceptanceRate as 'N/A'.`
+            }
+        });
+        const colleges = JSON.parse(response.text || "[]");
+        return colleges.map((c: any, i: number) => ({
+            ...c,
+            id: c.id || `college-${Date.now()}-${i}`,
+            matchScore: c.matchScore ?? 70,
+            isTarget: c.isTarget ?? false,
+            acceptanceRate: c.acceptanceRate || 'N/A',
+            tuition: c.tuition || 'N/A',
+            ranking: c.ranking || 100,
+            location: c.location || 'USA'
+        }));
+    } catch (e) {
+        console.error("College Finder Error", e);
         return [];
     }
 };
@@ -215,6 +299,23 @@ export const findEssayPrompts = async (college: string): Promise<string[]> => {
     } catch (e) {
         console.error(e);
         return ["Describe a topic, idea, or concept you find so engaging that it makes you lose all track of time.", "The lessons we take from obstacles we encounter can be fundamental to later success.", "Share an essay on any topic of your choice."];
+    }
+};
+
+// --- Specialized: Sample Essay Generator ---
+export const generateSampleEssay = async (prompt: string, profile: StudentProfile): Promise<string> => {
+    try {
+        const response = await ai.models.generateContent({
+            model: MODEL_NAME,
+            contents: `Write a concise sample essay (~400-500 words) answering: "${prompt}". Tailor voice to this student profile: ${JSON.stringify(profile)}. Provide markdown-friendly output.`,
+            config: {
+                systemInstruction: "You are an Ivy League admissions coach. Write specific, narrative-driven examples, not generic advice."
+            }
+        });
+        return response.text || "Sample essay unavailable.";
+    } catch (e) {
+        console.error("Sample essay error", e);
+        return "Could not generate a sample essay right now.";
     }
 };
 

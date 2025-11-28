@@ -3,9 +3,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import Layout from './components/Layout';
 import ChatInterface from './components/ChatInterface';
 import { AppView, UserRole, StudentProfile, ChatMessage, College, Essay, RoadmapItem, ForumPost, TrainingResource, Scholarship, ForumReply, ReadinessAssessment, SampleProfile, HumanCounselor, User } from './types';
-import { INITIAL_PROFILE, MOCK_COLLEGES, MOCK_FORUM_POSTS, MOCK_ROADMAP, MOCK_TRAINING, MOCK_SCHOLARSHIPS, MOCK_SAMPLE_PROFILES, MOCK_COUNSELORS } from './constants';
+import { INITIAL_PROFILE, MOCK_COLLEGES, MOCK_FORUM_POSTS, MOCK_TRAINING, MOCK_SCHOLARSHIPS, MOCK_SAMPLE_PROFILES, MOCK_COUNSELORS } from './constants';
 import * as Gemini from './services/geminiService';
 import * as AuthService from './services/authService';
+import * as RoadmapService from './services/roadmapService';
+import * as ReadinessService from './services/readinessService';
+import * as ProfileService from './services/profileService';
+import * as EssayService from './services/essayService';
 
 // --- Helper Components ---
 
@@ -70,6 +74,8 @@ const DictationButton: React.FC<{
   );
 };
 
+import { renderMarkdownToHtml } from './utils/markdown';
+
 // --- Sub-Components ---
 
 const LandingView: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
@@ -132,14 +138,19 @@ type DiscoveryTab = 'details' | 'analysis' | 'readiness';
 const DiscoveryView: React.FC<{ 
     profile: StudentProfile; 
     setProfile: (p: StudentProfile) => void;
+    onSaveProfile: () => void;
+    onResetProfile: () => void;
+    profileSaving: boolean;
+    profileLoading: boolean;
     onAnalyze: () => void;
     analysis: string | undefined;
     readiness: ReadinessAssessment | null;
     onAssessReadiness: () => void;
     isTyping: boolean;
+    readinessLoading: boolean;
     activeTab: DiscoveryTab;
     setActiveTab: (tab: DiscoveryTab) => void;
-}> = ({ profile, setProfile, onAnalyze, analysis, readiness, onAssessReadiness, isTyping, activeTab, setActiveTab }) => {
+}> = ({ profile, setProfile, onSaveProfile, onResetProfile, profileSaving, profileLoading, onAnalyze, analysis, readiness, onAssessReadiness, isTyping, readinessLoading, activeTab, setActiveTab }) => {
     
     const handleExtracurricularDictation = (text: string) => {
         // Append new dictation as a new line item
@@ -172,6 +183,22 @@ const DiscoveryView: React.FC<{
 
             {activeTab === 'details' ? (
                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                    <div className="flex justify-end gap-2">
+                        <button 
+                            onClick={onResetProfile}
+                            disabled={profileLoading}
+                            className="text-xs font-bold px-3 py-2 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-50"
+                        >
+                            {profileLoading ? 'Resetting...' : 'Reset'}
+                        </button>
+                        <button 
+                            onClick={onSaveProfile}
+                            disabled={profileSaving}
+                            className="text-xs font-bold px-3 py-2 rounded-lg bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                        >
+                            {profileSaving ? 'Saving...' : 'Save Profile'}
+                        </button>
+                    </div>
                     <section>
                         <h3 className="text-xs font-bold text-gray-500 uppercase mb-2">Academic</h3>
                         <div className="bg-white p-4 rounded-xl border border-gray-200 space-y-3 shadow-sm">
@@ -219,14 +246,17 @@ const DiscoveryView: React.FC<{
                     {!analysis ? (
                          <div className="text-center mt-10">
                              <p className="text-gray-500 mb-4">Let me analyze your profile to find your "spike" and best-fit majors.</p>
-                             <button onClick={onAnalyze} disabled={isTyping} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg shadow-indigo-200">
-                                 {isTyping ? 'Analyzing...' : 'Run SWOT Analysis'}
-                             </button>
-                         </div>
+                            <button onClick={onAnalyze} disabled={isTyping} className="bg-indigo-600 text-white px-6 py-3 rounded-full font-bold shadow-lg shadow-indigo-200">
+                                {isTyping ? 'Analyzing...' : 'Run SWOT Analysis'}
+                            </button>
+                        </div>
                     ) : (
                         <div className="prose prose-sm prose-indigo max-w-none bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                             <h3 className="text-lg font-bold text-indigo-900 mb-4">Profile Assessment</h3>
-                            <div className="whitespace-pre-wrap text-gray-700">{analysis}</div>
+                            <div
+                                className="text-gray-700"
+                                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(analysis) }}
+                            ></div>
                             <button onClick={onAnalyze} className="mt-6 text-indigo-600 text-xs font-bold uppercase tracking-wide">Re-Analyze</button>
                         </div>
                     )}
@@ -235,16 +265,29 @@ const DiscoveryView: React.FC<{
                 // Readiness Tab
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
                     {!readiness ? (
-                        <div className="text-center mt-10">
-                            <div className="text-6xl mb-4">🎯</div>
-                            <h3 className="text-lg font-bold text-gray-800 mb-2">Are you ready for your dream schools?</h3>
-                            <p className="text-gray-500 mb-6 text-sm px-4">Get a quantitative score based on your GPA, Test Scores, and Extracurriculars against your target colleges.</p>
-                            <button onClick={onAssessReadiness} disabled={isTyping} className="bg-indigo-600 text-white px-8 py-3 rounded-full font-bold shadow-xl active:scale-95 transition-transform">
-                                {isTyping ? 'Calculating...' : 'Check My Readiness'}
-                            </button>
-                        </div>
+                            <div className="text-center mt-10">
+                                <div className="text-6xl mb-4">🎯</div>
+                                <h3 className="text-lg font-bold text-gray-800 mb-2">Are you ready for your dream schools?</h3>
+                                <p className="text-gray-500 mb-6 text-sm px-4">Get a quantitative score based on your GPA, Test Scores, and Extracurriculars against your target colleges.</p>
+                                <button onClick={onAssessReadiness} disabled={readinessLoading} className="bg-indigo-600 text-white px-8 py-3 rounded-full font-bold shadow-xl active:scale-95 transition-transform disabled:bg-indigo-300 disabled:cursor-not-allowed">
+                                    {readinessLoading ? 'Calculating...' : 'Check My Readiness'}
+                                </button>
+                            </div>
                     ) : (
                         <div className="space-y-6 pb-20">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-700">Readiness Assessment</h3>
+                                    <p className="text-xs text-gray-500">Latest AI snapshot of your profile</p>
+                                </div>
+                                <button
+                                    onClick={onAssessReadiness}
+                                    disabled={readinessLoading}
+                                    className={`text-xs font-bold px-3 py-2 rounded-lg text-white shadow-sm transition-colors ${readinessLoading ? 'bg-indigo-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                                >
+                                    {readinessLoading ? 'Calculating...' : 'Recalculate'}
+                                </button>
+                            </div>
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50 text-center relative overflow-hidden">
                                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-400 via-yellow-400 to-green-400"></div>
                                 <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">Overall Readiness</h3>
@@ -306,8 +349,11 @@ const CollegeFinderView: React.FC<{
     colleges: College[];
     onCompare: (c1: string, c2: string) => void;
     onChat: (msg: string) => void;
-}> = ({ colleges, onCompare, onChat }) => {
+    onSearch: (criteria: string) => void;
+    loading: boolean;
+}> = ({ colleges, onCompare, onChat, onSearch, loading }) => {
     const [selected, setSelected] = useState<string[]>([]);
+    const [query, setQuery] = useState('');
 
     const toggleSelect = (id: string) => {
         if (selected.includes(id)) setSelected(selected.filter(s => s !== id));
@@ -328,8 +374,26 @@ const CollegeFinderView: React.FC<{
                 )}
             </div>
             
+            <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-200 mb-4 flex gap-2">
+                <input 
+                    className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500" 
+                    placeholder="e.g., Top CS schools in California with good AI research" 
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                />
+                <button 
+                    onClick={() => onSearch(query)} 
+                    disabled={loading}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold text-white ${loading ? 'bg-indigo-300' : 'bg-indigo-600 hover:bg-indigo-700'} transition`}
+                >
+                    {loading ? 'Finding...' : 'Find'}
+                </button>
+            </div>
+            
             <div className="space-y-4 overflow-y-auto pb-20">
-                {colleges.map(c => (
+                {colleges.length === 0 ? (
+                    <div className="text-center text-gray-500 mt-10">No universities yet. Try a search!</div>
+                ) : colleges.map(c => (
                     <div key={c.id} className={`bg-white rounded-xl shadow-sm border-2 overflow-hidden transition-all ${selected.includes(c.id) ? 'border-indigo-500 transform scale-[1.01]' : 'border-transparent'}`} onClick={() => toggleSelect(c.id)}>
                         <div className="p-4">
                             <div className="flex justify-between items-start">
@@ -373,20 +437,30 @@ const CollegeFinderView: React.FC<{
 
 const ScholarshipView: React.FC<{
     scholarships: Scholarship[];
-    onFindMore: () => void;
+    onFindMore: (criteria: string) => void;
     isTyping: boolean;
 }> = ({ scholarships, onFindMore, isTyping }) => {
+    const [query, setQuery] = useState('');
+
     return (
         <div className="flex flex-col h-full p-4 bg-slate-50">
              <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-gray-800">Scholarship Matcher</h2>
-                <button 
-                    onClick={onFindMore} 
-                    disabled={isTyping}
-                    className="bg-green-600 text-white px-4 py-2 text-xs rounded-full font-bold flex items-center gap-1 shadow-md active:scale-95 transition"
-                >
-                    {isTyping ? 'Scanning...' : '🔎 Find More'}
-                </button>
+                <div className="flex gap-2 items-center">
+                    <input 
+                        className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-500"
+                        placeholder="e.g., STEM scholarships, women in CS"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                    />
+                    <button 
+                        onClick={() => onFindMore(query)} 
+                        disabled={isTyping}
+                        className="bg-green-600 text-white px-4 py-2 text-xs rounded-full font-bold flex items-center gap-1 shadow-md active:scale-95 transition disabled:bg-green-300"
+                    >
+                        {isTyping ? 'Scanning...' : '🔎 Find'}
+                    </button>
+                </div>
             </div>
 
             <div className="space-y-4 overflow-y-auto pb-20">
@@ -433,11 +507,23 @@ const ApplicationView: React.FC<{
     essays: Essay[];
     setEssays: (e: Essay[]) => void;
     onCritique: (prompt: string, content: string) => Promise<string>;
-    onBrainstorm: (prompt: string) => void;
+    onBrainstorm: (prompt: string, essayId?: string) => void;
+    onSampleEssay: (prompt: string) => Promise<string>;
     onFindPrompts: (college: string) => Promise<string[]>;
-}> = ({ essays, setEssays, onCritique, onBrainstorm, onFindPrompts }) => {
+    resumeEssayId: string | null;
+    onResumeApplied: () => void;
+    essaySampleLoading: boolean;
+    onCreateEssay: (collegeName: string, prompt: string) => Promise<void>;
+    onUpdateEssay: (id: string, updates: Partial<Essay>) => Promise<void>;
+    onDeleteEssay: (id: string) => Promise<void>;
+    loading: boolean;
+}> = ({ essays, setEssays, onCritique, onBrainstorm, onFindPrompts, onSampleEssay, resumeEssayId, onResumeApplied, essaySampleLoading, onCreateEssay, onUpdateEssay, onDeleteEssay, loading }) => {
     const [activeEssayId, setActiveEssayId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [loadingCritique, setLoadingCritique] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [showPreview, setShowPreview] = useState(false);
     
     // Create New Essay State
     const [isCreating, setIsCreating] = useState(false);
@@ -447,19 +533,44 @@ const ApplicationView: React.FC<{
     const [loadingPrompts, setLoadingPrompts] = useState(false);
 
     const activeEssay = essays.find(e => e.id === activeEssayId);
+    
+    useEffect(() => {
+        if (resumeEssayId) {
+            setActiveEssayId(resumeEssayId);
+            setIsCreating(false);
+            onResumeApplied();
+        }
+    }, [resumeEssayId]);
 
     const handleCritique = async () => {
         if (!activeEssay) return;
-        setLoading(true);
+        setLoadingCritique(true);
         const feedback = await onCritique(activeEssay.prompt, activeEssay.content);
         setEssays(essays.map(e => e.id === activeEssayId ? { ...e, aiFeedback: feedback } : e));
-        setLoading(false);
+        await onUpdateEssay(activeEssayId!, { aiFeedback: feedback, content: activeEssay.content });
+        setLoadingCritique(false);
+    };
+
+    const handleManualSave = async () => {
+        if (!activeEssay) return;
+        try {
+            setSaving(true);
+            await onUpdateEssay(activeEssayId!, {
+                content: activeEssay.content,
+                prompt: activeEssay.prompt,
+                collegeName: activeEssay.collegeName,
+            });
+            setLastSaved(new Date());
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleEssayDictation = (text: string) => {
         if(!activeEssay) return;
         const newContent = activeEssay.content + (activeEssay.content ? ' ' : '') + text;
         setEssays(essays.map(essay => essay.id === activeEssayId ? {...essay, content: newContent} : essay));
+        onUpdateEssay(activeEssayId!, { content: newContent });
     };
 
     const handleFindPrompts = async () => {
@@ -470,20 +581,20 @@ const ApplicationView: React.FC<{
         setLoadingPrompts(false);
     };
 
-    const handleCreateEssay = () => {
+    const handleCreateEssay = async () => {
         if (!newCollege || !newPrompt) return;
-        const newEssay: Essay = {
-            id: Date.now().toString(),
-            collegeName: newCollege,
-            prompt: newPrompt,
-            content: '',
-            lastEdited: new Date()
-        };
-        setEssays([...essays, newEssay]);
-        setIsCreating(false);
-        setNewCollege('');
-        setNewPrompt('');
-        setSuggestedPrompts([]);
+        try {
+            setCreating(true);
+            await onCreateEssay(newCollege, newPrompt);
+            setIsCreating(false);
+            setNewCollege('');
+            setNewPrompt('');
+            setSuggestedPrompts([]);
+        } catch (e) {
+            console.error('Failed to create essay', e);
+        } finally {
+            setCreating(false);
+        }
     };
 
     // --- Create Essay Wizard ---
@@ -541,10 +652,10 @@ const ApplicationView: React.FC<{
 
                     <button 
                         onClick={handleCreateEssay}
-                        disabled={!newCollege || !newPrompt}
+                        disabled={!newCollege || !newPrompt || creating}
                         className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Create Draft
+                        {creating ? 'Adding...' : 'Add to Prompt List'}
                     </button>
                 </div>
             </div>
@@ -558,31 +669,85 @@ const ApplicationView: React.FC<{
                 <div className="p-4 border-b flex justify-between items-center">
                     <button onClick={() => setActiveEssayId(null)} className="text-sm text-gray-500">← Back</button>
                     <h3 className="font-bold text-sm truncate max-w-[200px]">{activeEssay.collegeName}</h3>
-                    <button onClick={handleCritique} disabled={loading} className="text-indigo-600 text-sm font-bold">
-                        {loading ? 'Thinking...' : 'Critique'}
-                    </button>
+                    <div className="flex gap-2 items-center">
+                        <button 
+                            onClick={async () => {
+                                if (window.confirm('Delete this draft?')) {
+                                    await onDeleteEssay(activeEssayId!);
+                                    setActiveEssayId(null);
+                                }
+                            }} 
+                            className="text-xs text-red-500 font-bold px-3 py-1 rounded-full border border-red-200"
+                        >
+                            Delete
+                        </button>
+                        <button 
+                            onClick={() => setShowPreview(p => !p)} 
+                            className={`text-xs font-bold px-3 py-1 rounded-full border ${showPreview ? 'bg-indigo-600 text-white border-indigo-600' : 'text-indigo-600 border-indigo-200'}`}
+                        >
+                            {showPreview ? 'Edit' : 'Preview'}
+                        </button>
+                        <button 
+                            onClick={handleManualSave} 
+                            disabled={saving} 
+                            className={`text-xs font-bold px-3 py-1 rounded-full border ${saving ? 'bg-gray-200 text-gray-500' : 'text-green-700 border-green-300'}`}
+                        >
+                            {saving ? 'Saving...' : 'Save'}
+                        </button>
+                        {lastSaved && (
+                            <span className="text-[10px] text-gray-400">Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        )}
+                        <button onClick={handleCritique} disabled={loadingCritique} className="text-indigo-600 text-sm font-bold">
+                            {loadingCritique ? 'Thinking...' : 'Critique'}
+                        </button>
+                    </div>
                 </div>
                 <div className="p-4 bg-gray-50 border-b">
                     <p className="text-xs text-gray-500 font-bold uppercase mb-1">Prompt</p>
                     <p className="text-sm text-gray-800 italic">{activeEssay.prompt}</p>
-                    <button onClick={() => onBrainstorm(activeEssay.prompt)} className="mt-2 text-xs text-indigo-600 font-bold flex items-center gap-1">
-                        ✨ Brainstorm Ideas with AI
-                    </button>
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                        <button onClick={() => onBrainstorm(activeEssay.prompt, activeEssay.id)} className="text-xs text-indigo-600 font-bold flex items-center gap-1">
+                            ✨ Brainstorm Ideas with AI
+                        </button>
+                            <button 
+                                onClick={async () => {
+                                    const sample = await onSampleEssay(activeEssay.prompt);
+                                    setEssays(essays.map(e => e.id === activeEssayId ? { ...e, content: sample } : e));
+                                    onUpdateEssay(activeEssayId!, { content: sample });
+                                }} 
+                                disabled={essaySampleLoading}
+                                className={`text-xs font-bold flex items-center gap-1 ${essaySampleLoading ? 'text-green-300' : 'text-green-600'}`}
+                            >
+                                {essaySampleLoading ? '⌛ Generating...' : '📄 Sample Essay'}
+                        </button>
+                    </div>
                 </div>
                 <div className="flex-1 relative">
-                    <textarea 
-                        className="w-full h-full p-4 resize-none focus:outline-none text-base leading-relaxed pb-16"
-                        placeholder="Start writing..."
-                        value={activeEssay.content}
-                        onChange={(e) => setEssays(essays.map(essay => essay.id === activeEssayId ? {...essay, content: e.target.value} : essay))}
-                    />
-                    <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
-                        <span className="text-[10px] text-gray-400 bg-white/80 px-2 rounded">Voice Note</span>
-                        <DictationButton 
-                            onTranscript={handleEssayDictation}
-                            className="p-4 rounded-full shadow-lg bg-indigo-600 text-white hover:bg-indigo-700 border-none"
-                        />
-                    </div>
+                    {showPreview ? (
+                        <div className="h-full overflow-y-auto p-4 prose prose-sm max-w-none bg-white">
+                            <div dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(activeEssay.content) }} />
+                        </div>
+                    ) : (
+                        <>
+                            <textarea 
+                                className="w-full h-full p-4 resize-none focus:outline-none text-base leading-relaxed pb-16"
+                                placeholder="Start writing with markdown..."
+                                value={activeEssay.content}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEssays(essays.map(essay => essay.id === activeEssayId ? {...essay, content: val} : essay));
+                                    onUpdateEssay(activeEssayId!, { content: val });
+                                }}
+                            />
+                            <div className="absolute bottom-4 right-4 flex flex-col items-end gap-2">
+                                <span className="text-[10px] text-gray-400 bg-white/80 px-2 rounded">Voice Note</span>
+                                <DictationButton 
+                                    onTranscript={handleEssayDictation}
+                                    className="p-4 rounded-full shadow-lg bg-indigo-600 text-white hover:bg-indigo-700 border-none"
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
                 {activeEssay.aiFeedback && (
                     <div className="h-1/3 bg-yellow-50 p-4 overflow-y-auto border-t border-yellow-200">
@@ -597,15 +762,18 @@ const ApplicationView: React.FC<{
     // --- Dashboard View ---
     return (
         <div className="p-4 space-y-4">
-            <h2 className="text-xl font-bold">Application Hub</h2>
+            <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold">Application Hub</h2>
+                {loading && <span className="text-xs text-gray-500">Loading...</span>}
+            </div>
             <div className="grid grid-cols-2 gap-3">
                 <div className="bg-indigo-50 p-4 rounded-xl text-center">
-                    <div className="text-2xl font-bold text-indigo-800">4</div>
-                    <div className="text-xs text-indigo-600">Pending Essays</div>
+                    <div className="text-2xl font-bold text-indigo-800">{essays.length}</div>
+                    <div className="text-xs text-indigo-600">Drafts</div>
                 </div>
                 <div className="bg-green-50 p-4 rounded-xl text-center">
-                    <div className="text-2xl font-bold text-green-800">2</div>
-                    <div className="text-xs text-green-600">Completed</div>
+                    <div className="text-2xl font-bold text-green-800">{essays.filter(e => e.content).length}</div>
+                    <div className="text-xs text-green-600">Started</div>
                 </div>
             </div>
 
@@ -634,9 +802,13 @@ const PlanningView: React.FC<{
     roadmap: RoadmapItem[]; 
     onGenerate: () => void; 
     isTyping: boolean; 
-    setRoadmap: React.Dispatch<React.SetStateAction<RoadmapItem[]>>;
+    onAddTask: (task: { title: string; description?: string; date?: string; category?: RoadmapItem['category']; status?: RoadmapItem['status']; }) => Promise<void>;
+    onUpdateTask: (id: string, updates: Partial<RoadmapItem>) => Promise<void>;
+    onDeleteTask: (id: string) => Promise<void>;
+    onToggleStatus: (id: string) => Promise<void>;
     onRequestConsultation: () => void;
-}> = ({ roadmap, onGenerate, isTyping, setRoadmap, onRequestConsultation }) => {
+    isLoading: boolean;
+}> = ({ roadmap, onGenerate, isTyping, onAddTask, onUpdateTask, onDeleteTask, onToggleStatus, onRequestConsultation, isLoading }) => {
     const [isAdding, setIsAdding] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [tempItem, setTempItem] = useState<Partial<RoadmapItem>>({});
@@ -644,14 +816,22 @@ const PlanningView: React.FC<{
     // Add Item State
     const [newItem, setNewItem] = useState<Partial<RoadmapItem>>({ title: '', description: '', date: '', category: 'application' });
 
-    const handleToggleStatus = (id: string) => {
-        setRoadmap(prev => prev.map(item => item.id === id ? { ...item, status: item.status === 'completed' ? 'pending' : 'completed' } : item));
+    const handleToggleStatus = async (id: string) => {
+        try {
+            await onToggleStatus(id);
+        } catch (err) {
+            console.error('Failed to toggle status', err);
+        }
     };
 
-    const handleDelete = (id: string, e: React.MouseEvent) => {
+    const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if(window.confirm("Delete this task?")) {
-            setRoadmap(prev => prev.filter(item => item.id !== id));
+            try {
+                await onDeleteTask(id);
+            } catch (err) {
+                console.error('Failed to delete task', err);
+            }
         }
     };
 
@@ -660,25 +840,37 @@ const PlanningView: React.FC<{
         setTempItem({...item});
     };
 
-    const handleSaveEdit = () => {
+    const handleSaveEdit = async () => {
         if (!editingId) return;
-        setRoadmap(prev => prev.map(item => item.id === editingId ? { ...item, ...tempItem } as RoadmapItem : item));
-        setEditingId(null);
+        const updates: Partial<RoadmapItem> = {};
+        if (tempItem.title !== undefined) updates.title = tempItem.title;
+        if (tempItem.description !== undefined) updates.description = tempItem.description;
+        if (tempItem.date !== undefined) updates.date = tempItem.date;
+        if (tempItem.category !== undefined) updates.category = tempItem.category as RoadmapItem['category'];
+
+        try {
+            await onUpdateTask(editingId, updates);
+            setEditingId(null);
+        } catch (err) {
+            console.error('Failed to update task', err);
+        }
     };
 
-    const handleAddItem = () => {
+    const handleAddItem = async () => {
         if (!newItem.title) return;
-        const item: RoadmapItem = {
-            id: Date.now().toString(),
-            title: newItem.title,
-            description: newItem.description || '',
-            date: newItem.date || 'TBD',
-            category: (newItem.category as any) || 'application',
-            status: 'pending'
-        };
-        setRoadmap(prev => [...prev, item]);
-        setNewItem({ title: '', description: '', date: '', category: 'application' });
-        setIsAdding(false);
+        try {
+            await onAddTask({
+                title: newItem.title,
+                description: newItem.description || '',
+                date: newItem.date || 'TBD',
+                category: (newItem.category as any) || 'application',
+                status: 'pending'
+            });
+            setNewItem({ title: '', description: '', date: '', category: 'application' });
+            setIsAdding(false);
+        } catch (err) {
+            console.error('Failed to add task', err);
+        }
     };
 
     return (
@@ -724,7 +916,9 @@ const PlanningView: React.FC<{
                 </div>
             )}
 
-            {roadmap.length === 0 ? (
+            {isLoading ? (
+                <div className="text-center mt-20 text-gray-500">Loading your roadmap...</div>
+            ) : roadmap.length === 0 ? (
                 <div className="text-center mt-20">
                     <p className="text-gray-500">No roadmap generated yet.</p>
                     <button onClick={onGenerate} className="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Create Strategy</button>
@@ -784,13 +978,39 @@ const PlanningView: React.FC<{
 };
 
 // Replaced simple TrainingView with comprehensive Resource Hub
-const TrainingView: React.FC<{ resources: TrainingResource[]; initialTab?: 'learn' | 'inspire' | 'expert' }> = ({ resources, initialTab = 'learn' }) => {
+const TrainingView: React.FC<{ resources: TrainingResource[]; initialTab?: 'learn' | 'inspire' | 'expert'; profile: StudentProfile }> = ({ resources, initialTab = 'learn', profile }) => {
     const [tab, setTab] = useState<'learn' | 'inspire' | 'expert'>(initialTab);
     const [selectedProfile, setSelectedProfile] = useState<SampleProfile | null>(null);
     const [bookingCounselor, setBookingCounselor] = useState<HumanCounselor | null>(null);
     const [bookingStep, setBookingStep] = useState<'select' | 'success'>('select');
     const [selectedSlot, setSelectedSlot] = useState<string>('');
     const [selectedResource, setSelectedResource] = useState<TrainingResource | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filteredResources, setFilteredResources] = useState<TrainingResource[]>(resources);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [searching, setSearching] = useState(false);
+
+    const applyResourceFilter = (term: string, list: TrainingResource[] = resources) => {
+        const q = term.toLowerCase().trim();
+        if (!q) {
+            setFilteredResources(list);
+            return;
+        }
+        setFilteredResources(
+            list.filter(r =>
+                r.title.toLowerCase().includes(q) ||
+                r.provider.toLowerCase().includes(q) ||
+                r.type.toLowerCase().includes(q)
+            )
+        );
+    };
+
+    useEffect(() => {
+        if (!hasSearched) {
+            setFilteredResources(resources || []);
+        }
+        // This effect runs when resources change, ensuring the initial list is populated.
+    }, [resources]);
 
     // Reset flow when modal closes
     const closeBooking = () => {
@@ -953,8 +1173,46 @@ const TrainingView: React.FC<{ resources: TrainingResource[]; initialTab?: 'lear
             <div className="flex-1 overflow-y-auto p-4 pb-20">
                 {tab === 'learn' && (
                      <div className="space-y-3">
+                        <div className="flex gap-2 items-center mb-2">
+                            <input 
+                                value={searchTerm}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setSearchTerm(val);
+                                    if (!val.trim()) applyResourceFilter('');
+                                }}
+                                placeholder="Search courses (e.g., AI, essay writing, SAT)"
+                                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-500"
+                            />
+                            <button 
+                                onClick={async () => {
+                                    setHasSearched(true);
+                                    if (!searchTerm.trim()) {
+                                        applyResourceFilter('');
+                                        return;
+                                    }
+                                    setSearching(true);
+                                    const aiResources = await Gemini.findTrainingResources(profile, searchTerm);
+                                    if (aiResources.length > 0) {
+                                        setFilteredResources(aiResources as TrainingResource[]);
+                                    } else {
+                                        // Fallback to local search if AI returns nothing
+                                        applyResourceFilter(searchTerm);
+                                    }
+                                    setSearching(false);
+                                }}
+                                className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-indigo-300"
+                                disabled={searching}
+                            >
+                                {searching ? 'Finding...' : 'Find'}
+                            </button>
+                        </div>
                         <div className="mb-4 text-xs text-gray-500 uppercase font-bold tracking-wider">Recommended Courses</div>
-                        {resources.map(res => (
+                        {filteredResources.length === 0 && hasSearched && !searching ? (
+                            <div className="text-sm text-gray-500 bg-white border border-dashed border-gray-200 rounded-xl p-4 text-center">
+                                No matches yet. Try another keyword.
+                            </div>
+                        ) : filteredResources.map(res => (
                             <div key={res.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
                                 <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-xl">
                                     {res.type === 'course' ? '🎓' : res.type === 'video' ? '📺' : '📖'}
@@ -1062,15 +1320,25 @@ const App: React.FC = () => {
   
   // Data State
   const [profile, setProfile] = useState<StudentProfile>(INITIAL_PROFILE);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [readiness, setReadiness] = useState<ReadinessAssessment | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
   const [colleges, setColleges] = useState<College[]>(MOCK_COLLEGES);
-  const [roadmap, setRoadmap] = useState<RoadmapItem[]>(MOCK_ROADMAP);
+  const [collegeLoading, setCollegeLoading] = useState(false);
+  const [roadmap, setRoadmap] = useState<RoadmapItem[]>([]);
+  const [roadmapLoading, setRoadmapLoading] = useState(false);
   const [scholarships, setScholarships] = useState<Scholarship[]>(MOCK_SCHOLARSHIPS);
   const [posts, setPosts] = useState<ForumPost[]>(MOCK_FORUM_POSTS);
   const [essays, setEssays] = useState<Essay[]>([
       { id: '1', collegeName: 'MIT', prompt: 'Tell us about a challenge...', content: '', lastEdited: new Date() },
       { id: '2', collegeName: 'Stanford', prompt: 'What matters to you, and why?', content: '', lastEdited: new Date() }
   ]);
+  const [assistantChat, setAssistantChat] = useState<ChatMessage[]>([]);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantTyping, setAssistantTyping] = useState(false);
+  const [essaySampleLoading, setEssaySampleLoading] = useState(false);
+  const [essaysLoading, setEssaysLoading] = useState(false);
 
   // View States
   const [discoveryTab, setDiscoveryTab] = useState<DiscoveryTab>('details');
@@ -1085,6 +1353,9 @@ const App: React.FC = () => {
   // Chat States
   const [generalChat, setGeneralChat] = useState<ChatMessage[]>([]);
   const [interviewChat, setInterviewChat] = useState<ChatMessage[]>([]);
+  const [chatReturnView, setChatReturnView] = useState<AppView | null>(null);
+  const [chatReturnEssayId, setChatReturnEssayId] = useState<string | null>(null);
+  const [resumeEssayId, setResumeEssayId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!process.env.API_KEY) setApiKeyMissing(true);
@@ -1106,6 +1377,77 @@ const App: React.FC = () => {
     checkUser();
   }, []);
 
+  useEffect(() => {
+    const loadReadiness = async () => {
+      if (!user) {
+        setReadiness(null);
+        return;
+      }
+      try {
+          const data = await ReadinessService.fetchReadiness();
+          setReadiness(data);
+      } catch (error) {
+          console.error('Failed to load readiness', error);
+          setReadiness(null);
+      }
+    };
+    loadReadiness();
+  }, [user]);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) return;
+      try {
+        setProfileLoading(true);
+        const data = await ProfileService.fetchProfile();
+        if (data) {
+          setProfile(data);
+        } else {
+          setProfile({ ...INITIAL_PROFILE, name: user.displayName });
+        }
+      } catch (error) {
+        console.error('Failed to load profile', error);
+        setProfile(prev => ({ ...prev, name: user.displayName }));
+      } finally {
+        setProfileLoading(false);
+      }
+    };
+    loadProfile();
+  }, [user]);
+
+  useEffect(() => {
+    const loadRoadmap = async () => {
+      if (!user) return;
+      try {
+        setRoadmapLoading(true);
+        const tasks = await RoadmapService.fetchRoadmap();
+        setRoadmap(tasks);
+      } catch (error) {
+        console.error('Failed to load roadmap', error);
+      } finally {
+        setRoadmapLoading(false);
+      }
+    };
+
+    loadRoadmap();
+  }, [user]);
+
+  useEffect(() => {
+    const loadEssays = async () => {
+      if (!user) return;
+      try {
+        setEssaysLoading(true);
+        const data = await EssayService.fetchEssays();
+        setEssays(data);
+      } catch (error) {
+        console.error('Failed to load essays', error);
+      } finally {
+        setEssaysLoading(false);
+      }
+    };
+    loadEssays();
+  }, [user]);
+
   // Reset training tab when navigating away
   useEffect(() => {
     if (view !== AppView.TRAINING) {
@@ -1113,13 +1455,20 @@ const App: React.FC = () => {
     }
   }, [view]);
 
+  const generalChatRef = useRef<ChatMessage[]>([]);
+  useEffect(() => {
+    generalChatRef.current = generalChat;
+  }, [generalChat]);
+
   const handleGeneralChat = async (text: string) => {
       const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text, timestamp: new Date() };
-      setGeneralChat(prev => [...prev, userMsg]);
+      const history = [...generalChatRef.current, userMsg];
+      setGeneralChat(history);
       setIsTyping(true);
-      const response = await Gemini.getGeminiChatResponse(generalChat, text, profile);
+      const response = await Gemini.getGeminiChatResponse(history.slice(0, -1), text, profile);
       setIsTyping(false);
-      setGeneralChat(prev => [...prev, { id: Date.now().toString(), role: 'model', text: response, timestamp: new Date() }]);
+      const modelMsg: ChatMessage = { id: Date.now().toString(), role: 'model', text: response, timestamp: new Date() };
+      setGeneralChat(prev => [...prev, modelMsg]);
   };
 
   const handleAnalysis = async () => {
@@ -1131,23 +1480,94 @@ const App: React.FC = () => {
 
   const handleReadinessAssessment = async () => {
       setIsTyping(true);
+      setReadinessLoading(true);
       const result = await Gemini.assessReadiness(profile);
-      setReadiness(result);
+      try {
+          const saved = await ReadinessService.saveReadiness(result);
+          setReadiness(saved);
+      } catch (error) {
+          console.error('Failed to save readiness', error);
+          setReadiness(result);
+      }
       setIsTyping(false);
+      setReadinessLoading(false);
+  };
+
+  const handleSaveProfile = async () => {
+      if (!user) return;
+      try {
+          setProfileSaving(true);
+          const saved = await ProfileService.saveProfile(profile);
+          setProfile(saved);
+      } catch (error) {
+          console.error('Failed to save profile', error);
+      } finally {
+          setProfileSaving(false);
+      }
+  };
+
+  const handleResetProfile = async () => {
+      if (!user) return;
+      try {
+          setProfileLoading(true);
+          await ProfileService.deleteProfile();
+          setProfile({ ...INITIAL_PROFILE, name: user.displayName });
+      } catch (error) {
+          console.error('Failed to reset profile', error);
+      } finally {
+          setProfileLoading(false);
+      }
   };
 
   const handleComparison = async (c1: string, c2: string) => {
-      setView(AppView.DISCOVERY); // Switch to chat view
-      handleGeneralChat(`Compare ${c1} and ${c2} for me.`);
+      launchCounselorChat(`Compare ${c1} and ${c2} for me.`, AppView.COLLEGES);
   };
 
   const handleRoadmapGen = async () => {
       setIsTyping(true);
       const data = await Gemini.generateRoadmap(profile);
       if (data && data.milestones) {
-          setRoadmap(data.milestones.map((m: any, i: number) => ({ ...m, id: i.toString(), status: 'pending', date: m.timeline })));
+          const generated: RoadmapItem[] = data.milestones.map((m: any, i: number) => ({
+              id: `gen-${Date.now()}-${i}`,
+              title: m.title || m.milestone || `Task ${i + 1}`,
+              description: m.description || '',
+              status: 'pending',
+              date: m.timeline || 'TBD',
+              category: 'application',
+          }));
+
+          try {
+              const saved = await RoadmapService.replaceTasks(generated);
+              setRoadmap(saved);
+          } catch (err) {
+              console.error('Failed to save generated roadmap', err);
+              setRoadmap(generated);
+          }
       }
       setIsTyping(false);
+  };
+
+  const handleCreateRoadmapTask = async (task: { title: string; description?: string; date?: string; category?: RoadmapItem['category']; status?: RoadmapItem['status']; }) => {
+      const created = await RoadmapService.createTask(task);
+      setRoadmap(prev => [...prev, created]);
+  };
+
+  const handleUpdateRoadmapTask = async (id: string, updates: Partial<RoadmapItem>) => {
+      const updated = await RoadmapService.updateTask(id, updates);
+      setRoadmap(prev => prev.map(item => item.id === id ? updated : item));
+  };
+
+  const handleDeleteRoadmapTask = async (id: string) => {
+      await RoadmapService.deleteTask(id);
+      setRoadmap(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleToggleRoadmapStatus = async (id: string) => {
+      const current = roadmap.find(item => item.id === id);
+      if (!current) return;
+      const nextStatus: RoadmapItem['status'] = current.status === 'completed' ? 'pending' : 'completed';
+      const updated = await RoadmapService.updateTask(id, { status: nextStatus });
+      setRoadmap(prev => prev.map(item => item.id === id ? updated : item));
   };
 
   const handleConsultationRequest = () => {
@@ -1155,13 +1575,78 @@ const App: React.FC = () => {
       setView(AppView.TRAINING);
   };
 
-  const handleScholarshipSearch = async () => {
+  const handleScholarshipSearch = async (criteria: string) => {
       setIsTyping(true);
-      const newScholarships = await Gemini.findScholarships(profile);
+      const newScholarships = await Gemini.findScholarships(profile, criteria);
       if (newScholarships.length > 0) {
           setScholarships(newScholarships);
       }
       setIsTyping(false);
+  };
+
+  const handleCollegeSearch = async (criteria: string) => {
+      setCollegeLoading(true);
+      try {
+          const results = await Gemini.findColleges(profile, criteria);
+          if (results.length > 0) {
+              setColleges(results);
+          }
+      } catch (error) {
+          console.error('College search failed', error);
+      } finally {
+          setCollegeLoading(false);
+      }
+  };
+
+  const launchCounselorChat = (message: string, returnView: AppView, essayId?: string) => {
+      setChatReturnView(returnView);
+      setChatReturnEssayId(essayId || null);
+      setGeneralChat([]);
+      setView(AppView.DISCOVERY);
+      handleGeneralChat(message);
+  };
+
+  const handleSampleEssay = async (prompt: string): Promise<string> => {
+      if (essaySampleLoading) return '';
+      try {
+          setEssaySampleLoading(true);
+          const sample = await Gemini.generateSampleEssay(prompt, profile);
+          return sample;
+      } catch (error) {
+          console.error('Sample essay generation failed', error);
+          return 'Could not generate a sample essay at this time.';
+      } finally {
+          setEssaySampleLoading(false);
+      }
+  };
+
+  const handleCreateEssayServer = async (collegeName: string, prompt: string) => {
+      const created = await EssayService.createEssay({ collegeName, prompt, content: '' });
+      setEssays(prev => [...prev, created]);
+  };
+
+  const handleUpdateEssayServer = async (id: string, updates: Partial<Essay>) => {
+      const updated = await EssayService.updateEssay(id, updates);
+      setEssays(prev => prev.map(e => e.id === id ? updated : e));
+  };
+
+  const handleDeleteEssayServer = async (id: string) => {
+      await EssayService.deleteEssay(id);
+      setEssays(prev => prev.filter(e => e.id !== id));
+  };
+
+  const handleExitCounselorChat = () => {
+      setGeneralChat([]);
+      if (chatReturnView) {
+          if (chatReturnView === AppView.APPLICATIONS && chatReturnEssayId) {
+              setResumeEssayId(chatReturnEssayId);
+          }
+          setView(chatReturnView);
+      } else {
+          setView(AppView.DISCOVERY);
+      }
+      setChatReturnView(null);
+      setChatReturnEssayId(null);
   };
 
   const handleInterviewMsg = async (text: string) => {
@@ -1171,6 +1656,15 @@ const App: React.FC = () => {
       const response = await Gemini.getInterviewQuestion(interviewChat, profile);
       setIsTyping(false);
       setInterviewChat(prev => [...prev, { id: Date.now().toString(), role: 'model', text: response, timestamp: new Date() }]);
+  };
+
+  const handleAssistantChat = async (text: string) => {
+      const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', text, timestamp: new Date() };
+      setAssistantChat(prev => [...prev, userMsg]);
+      setAssistantTyping(true);
+      const response = await Gemini.getGeminiChatResponse(assistantChat, text, profile, 'You are a real-time admissions assistant. Keep responses concise and actionable.');
+      setAssistantTyping(false);
+      setAssistantChat(prev => [...prev, { id: Date.now().toString(), role: 'model', text: response, timestamp: new Date() }]);
   };
 
   const handleCreatePost = async (e: React.FormEvent) => {
@@ -1235,6 +1729,33 @@ const App: React.FC = () => {
       onToggleRole={() => setRole(r => r === UserRole.STUDENT ? UserRole.ADMIN : UserRole.STUDENT)}
       onLogout={AuthService.logout}
     >
+      {/* Floating AI assistant toggle */}
+      <div className="fixed bottom-24 right-4 z-40 space-y-2">
+        {assistantOpen && (
+          <div className="w-80 h-96 bg-white rounded-2xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col">
+            <div className="px-4 py-2 bg-indigo-600 text-white flex justify-between items-center">
+              <span className="text-xs font-bold">AI Assistant</span>
+              <button onClick={() => setAssistantOpen(false)} className="text-white text-xs">✕</button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ChatInterface 
+                messages={assistantChat} 
+                onSendMessage={handleAssistantChat} 
+                isTyping={assistantTyping} 
+                placeholder="Ask anything in real-time..."
+              />
+            </div>
+          </div>
+        )}
+        <button 
+          onClick={() => setAssistantOpen(open => !open)} 
+          className="w-14 h-14 rounded-full shadow-xl bg-indigo-600 text-white text-2xl flex items-center justify-center hover:bg-indigo-700 transition"
+          title="Chat with AI"
+        >
+          {assistantOpen ? '−' : '💬'}
+        </button>
+      </div>
+
        {view === AppView.DASHBOARD && (
            <div className="h-full flex flex-col">
                <div className="p-4 bg-white border-b sticky top-0 z-10 flex justify-between items-center">
@@ -1407,7 +1928,7 @@ const App: React.FC = () => {
             generalChat.length > 0 ? (
                 <div className="flex flex-col h-full">
                     <div className="bg-white p-2 flex justify-between items-center border-b">
-                         <button onClick={() => setGeneralChat([])} className="text-xs text-indigo-600 font-bold px-3">← Back to Profile</button>
+                         <button onClick={handleExitCounselorChat} className="text-xs text-indigo-600 font-bold px-3">← Back</button>
                          <span className="text-xs font-bold text-gray-500">Counselor Chat</span>
                     </div>
                     <ChatInterface messages={generalChat} onSendMessage={handleGeneralChat} isTyping={isTyping} />
@@ -1416,11 +1937,16 @@ const App: React.FC = () => {
                 <DiscoveryView 
                     profile={profile} 
                     setProfile={setProfile} 
+                    onSaveProfile={handleSaveProfile}
+                    onResetProfile={handleResetProfile}
+                    profileSaving={profileSaving}
+                    profileLoading={profileLoading}
                     onAnalyze={handleAnalysis} 
                     analysis={profile.aiAnalysis} 
                     readiness={readiness}
                     onAssessReadiness={handleReadinessAssessment}
                     isTyping={isTyping}
+                    readinessLoading={readinessLoading}
                     activeTab={discoveryTab}
                     setActiveTab={setDiscoveryTab}
                 />
@@ -1431,7 +1957,9 @@ const App: React.FC = () => {
            <CollegeFinderView 
                colleges={colleges} 
                onCompare={handleComparison}
-               onChat={(msg) => { setView(AppView.DISCOVERY); handleGeneralChat(msg); }}
+               onChat={(msg) => { launchCounselorChat(msg, AppView.COLLEGES); }}
+               onSearch={handleCollegeSearch}
+               loading={collegeLoading}
             />
        )}
 
@@ -1443,28 +1971,40 @@ const App: React.FC = () => {
            />
        )}
 
-       {view === AppView.APPLICATIONS && (
+        {view === AppView.APPLICATIONS && (
            <ApplicationView 
                essays={essays} 
                setEssays={setEssays}
                onCritique={Gemini.critiqueEssay}
-               onBrainstorm={(prompt) => { setView(AppView.DISCOVERY); handleGeneralChat(`Help me brainstorm for this essay prompt: "${prompt}"`); }}
+               onBrainstorm={(prompt, essayId) => { launchCounselorChat(`Help me brainstorm for this essay prompt: "${prompt}"`, AppView.APPLICATIONS, essayId); }}
                onFindPrompts={Gemini.findEssayPrompts}
-           />
+               onSampleEssay={handleSampleEssay}
+               resumeEssayId={resumeEssayId}
+               onResumeApplied={() => setResumeEssayId(null)}
+               essaySampleLoading={essaySampleLoading}
+               onCreateEssay={handleCreateEssayServer}
+               onUpdateEssay={handleUpdateEssayServer}
+               onDeleteEssay={handleDeleteEssayServer}
+               loading={essaysLoading}
+            />
        )}
 
        {view === AppView.PLANNING && (
            <PlanningView 
                roadmap={roadmap} 
-               setRoadmap={setRoadmap}
                onGenerate={handleRoadmapGen} 
                isTyping={isTyping} 
+               onAddTask={handleCreateRoadmapTask}
+               onUpdateTask={handleUpdateRoadmapTask}
+               onDeleteTask={handleDeleteRoadmapTask}
+               onToggleStatus={handleToggleRoadmapStatus}
                onRequestConsultation={handleConsultationRequest}
+               isLoading={roadmapLoading}
            />
        )}
 
        {view === AppView.TRAINING && (
-           <TrainingView resources={MOCK_TRAINING} initialTab={trainingTab} />
+           <TrainingView resources={MOCK_TRAINING} initialTab={trainingTab} profile={profile} />
        )}
 
        {view === AppView.INTERVIEW && (

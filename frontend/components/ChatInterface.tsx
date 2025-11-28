@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { ChatMessage } from '../types';
+import { renderMarkdownToHtml } from '../utils/markdown';
 
 interface ChatInterfaceProps {
   messages: ChatMessage[];
@@ -102,7 +103,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ messages, onSendMessage, 
                   : 'bg-white text-gray-800 border border-gray-100 rounded-bl-none'
               }`}
             >
-              <div className="whitespace-pre-wrap leading-relaxed">{msg.text}</div>
+              <div
+                className="leading-relaxed prose prose-sm max-w-none text-current"
+                dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(msg.text) }}
+              />
               <div className={`text-[10px] mt-1 opacity-70 ${msg.role === 'user' ? 'text-indigo-100' : 'text-gray-400'}`}>
                 {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>

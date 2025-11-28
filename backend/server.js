@@ -5,6 +5,10 @@ const cors = require('cors');
 const session = require('express-session'); // Changed from cookie-session
 const passport = require('passport');
 const authRoutes = require('./routes/auth.routes');
+const roadmapRoutes = require('./routes/roadmap.routes');
+const readinessRoutes = require('./routes/readiness.routes');
+const profileRoutes = require('./routes/profile.routes');
+const essayRoutes = require('./routes/essay.routes');
 const path = require('path'); // Add the path module
 require('./config/passport-setup'); // This will run the passport configuration
 
@@ -31,9 +35,15 @@ app.use(session({
 
 app.use(passport.initialize());
 app.use(passport.session());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // --- Routes ---
 app.use('/auth', authRoutes);
+app.use('/api/roadmap', roadmapRoutes);
+app.use('/api/readiness', readinessRoutes);
+app.use('/api/profile', profileRoutes);
+app.use('/api/essays', essayRoutes);
 
 // --- Serve Frontend Static Files ---
 // This serves your frontend's built files (HTML, CSS, JS, images, etc.)
