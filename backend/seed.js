@@ -9,7 +9,7 @@ const User = require('./models/user.model'); // Assuming path to your user model
 const Post = require('./models/post.model');
 
 const MOCK_USERS_DATA = [
-    { googleId: 'mock1', displayName: 'Kyler L.', email: 'kyler@example.com' },
+    { googleId: 'mock1', displayName: 'Kyler L.', email: 'kyler@example.com', role: 'ADMIN' },
     { googleId: 'mock2', displayName: 'Sarah P.', email: 'sarah@example.com' },
     { googleId: 'mock3', displayName: 'David C.', email: 'david@example.com' },
     { googleId: 'mock4', displayName: 'Emily R.', email: 'emily@example.com' },

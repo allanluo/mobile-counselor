@@ -136,9 +136,9 @@ export const analyzeProfile = async (profile: StudentProfile): Promise<string> =
     }
 };
 
-export const assessReadiness = async (profile: StudentProfile): Promise<ReadinessAssessment> => {
+export const assessReadiness = async (profile: StudentProfile, targetUniversity: string): Promise<ReadinessAssessment> => {
     const prompt = `
-        Assess college readiness for this profile: ${JSON.stringify(profile)}.
+        Assess college readiness for this profile: ${JSON.stringify(profile)} against the target university: "${targetUniversity}".
         Return the response as a single JSON object with the following keys: "overallScore", "academicScore", "extracurricularScore", "fitScore" (all numbers from 0-100), and "strengths", "weaknesses", "actionableSteps" (all arrays of strings).
         If you cannot determine a value, use a default like 0 for scores or an empty array [] for lists.
     `;

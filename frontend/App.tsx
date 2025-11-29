@@ -151,7 +151,9 @@ const DiscoveryView: React.FC<{
     readinessLoading: boolean;
     activeTab: DiscoveryTab;
     setActiveTab: (tab: DiscoveryTab) => void;
-}> = ({ profile, setProfile, onSaveProfile, onResetProfile, profileSaving, profileLoading, onAnalyze, analysis, readiness, onAssessReadiness, isTyping, readinessLoading, activeTab, setActiveTab }) => {
+    targetUniversity: string;
+    setTargetUniversity: (uni: string) => void;
+}> = ({ profile, setProfile, onSaveProfile, onResetProfile, profileSaving, profileLoading, onAnalyze, analysis, readiness, onAssessReadiness, isTyping, readinessLoading, activeTab, setActiveTab, targetUniversity, setTargetUniversity }) => {
     
     const handleExtracurricularDictation = (text: string) => {
         // Append new dictation as a new line item
@@ -265,29 +267,29 @@ const DiscoveryView: React.FC<{
             ) : (
                 // Readiness Tab
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
-                    {!readiness ? (
-                            <div className="text-center mt-10">
-                                <div className="text-6xl mb-4">🎯</div>
-                                <h3 className="text-lg font-bold text-gray-800 mb-2">Are you ready for your dream schools?</h3>
-                                <p className="text-gray-500 mb-6 text-sm px-4">Get a quantitative score based on your GPA, Test Scores, and Extracurriculars against your target colleges.</p>
-                                <button onClick={onAssessReadiness} disabled={readinessLoading} className="bg-indigo-600 text-white px-8 py-3 rounded-full font-bold shadow-xl active:scale-95 transition-transform disabled:bg-indigo-300 disabled:cursor-not-allowed">
-                                    {readinessLoading ? 'Calculating...' : 'Check My Readiness'}
-                                </button>
-                            </div>
-                    ) : (
+                    <div className="text-center mt-10">
+                        <div className="text-6xl mb-4">🎯</div>
+                        <h3 className="text-lg font-bold text-gray-800 mb-2">Are you ready for your dream school?</h3>
+                        <p className="text-gray-500 mb-4 text-sm px-4">Get a quantitative score based on your profile against a target university.</p>
+                        <div className="max-w-xs mx-auto mb-6">
+                            <input 
+                                className="w-full text-center text-sm border border-gray-200 rounded-lg px-3 py-3 focus:outline-none focus:border-indigo-500"
+                                placeholder="Enter Target University (e.g., MIT)"
+                                value={targetUniversity}
+                                onChange={(e) => setTargetUniversity(e.target.value)}
+                            />
+                        </div>
+                        <button onClick={onAssessReadiness} disabled={readinessLoading || !targetUniversity} className="bg-indigo-600 text-white px-8 py-3 rounded-full font-bold shadow-xl active:scale-95 transition-transform disabled:bg-indigo-300 disabled:cursor-not-allowed">
+                            {readinessLoading ? 'Calculating...' : 'Check My Readiness'}
+                        </button>
+                    </div>
+                    {readiness && (
                         <div className="space-y-6 pb-20">
                             <div className="flex justify-between items-center">
                                 <div>
                                     <h3 className="text-sm font-bold text-gray-700">Readiness Assessment</h3>
                                     <p className="text-xs text-gray-500">Latest AI snapshot of your profile</p>
                                 </div>
-                                <button
-                                    onClick={onAssessReadiness}
-                                    disabled={readinessLoading}
-                                    className={`text-xs font-bold px-3 py-2 rounded-lg text-white shadow-sm transition-colors ${readinessLoading ? 'bg-indigo-300 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                                >
-                                    {readinessLoading ? 'Calculating...' : 'Recalculate'}
-                                </button>
                             </div>
                             <div className="bg-white p-6 rounded-2xl shadow-sm border border-indigo-50 text-center relative overflow-hidden">
                                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-400 via-yellow-400 to-green-400"></div>
@@ -297,7 +299,7 @@ const DiscoveryView: React.FC<{
                                         {readiness.overallScore}
                                     </span>
                                 </div>
-                                <p className="text-xs text-gray-400">Target: {profile.dreamColleges[0] || 'Top Tier'}</p>
+                                <p className="text-xs text-gray-400">Target: {readiness.targetUniversity || 'N/A'}</p>
                             </div>
 
                             <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
@@ -337,7 +339,6 @@ const DiscoveryView: React.FC<{
                                 </div>
                             </div>
                             
-                            <button onClick={onAssessReadiness} className="w-full py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Recalculate Score</button>
                         </div>
                     )}
                 </div>
@@ -979,13 +980,15 @@ const PlanningView: React.FC<{
 };
 
 // Replaced simple TrainingView with comprehensive Resource Hub
-const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: SampleProfile[]; initialTab?: 'learn' | 'inspire' | 'expert'; profile: StudentProfile }> = ({ resources, sampleProfiles, initialTab = 'learn', profile }) => {
+const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: SampleProfile[]; initialTab?: 'learn' | 'inspire' | 'expert'; profile: StudentProfile; user: User | null }> = ({ resources, sampleProfiles, initialTab = 'learn', profile, user }) => {
     const [tab, setTab] = useState<'learn' | 'inspire' | 'expert'>(initialTab);
     const [selectedProfile, setSelectedProfile] = useState<SampleProfile | null>(null);
     const [successStories, setSuccessStories] = useState<SampleProfile[]>(sampleProfiles);
     const [bookingCounselor, setBookingCounselor] = useState<HumanCounselor | null>(null);
     const [bookingStep, setBookingStep] = useState<'select' | 'success'>('select');
     const [selectedSlot, setSelectedSlot] = useState<string>('');
+    const [bookingTopic, setBookingTopic] = useState('');
+    const [isBooking, setIsBooking] = useState(false);
     const [selectedResource, setSelectedResource] = useState<TrainingResource | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [storySearchTerm, setStorySearchTerm] = useState('');
@@ -1025,6 +1028,8 @@ const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: Sa
         setBookingCounselor(null);
         setBookingStep('select');
         setSelectedSlot('');
+        setBookingTopic('');
+        setIsBooking(false);
     };
 
     if (bookingCounselor) {
@@ -1066,15 +1071,39 @@ const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: Sa
 
                             <div className="mb-6">
                                 <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Topic (Optional)</label>
-                                <textarea className="w-full text-sm p-3 bg-gray-50 border rounded-lg focus:outline-none" rows={2} placeholder="Essay review, Mock interview..." />
+                                <textarea 
+                                    className="w-full text-sm p-3 bg-gray-50 border rounded-lg focus:outline-none" 
+                                    rows={2} 
+                                    placeholder="Essay review, Mock interview..." 
+                                    value={bookingTopic}
+                                    onChange={(e) => setBookingTopic(e.target.value)}
+                                />
                             </div>
 
                             <button 
-                                onClick={() => setBookingStep('success')}
-                                disabled={!selectedSlot}
+                                onClick={async () => {
+                                    if (!selectedSlot || !user) return;
+                                    setIsBooking(true);
+                                    try {
+                                        const response = await fetch('/api/bookings', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'include',
+                                            body: JSON.stringify({ student: { name: user.displayName, email: user.email }, counselor: bookingCounselor, slot: selectedSlot, topic: bookingTopic }),
+                                        });
+                                        if (!response.ok) throw new Error('Booking request failed');
+                                        setBookingStep('success');
+                                    } catch (error) {
+                                        console.error('Failed to send booking email:', error);
+                                        alert('There was an error sending your booking request. Please try again.');
+                                    } finally {
+                                        setIsBooking(false);
+                                    }
+                                }}
+                                disabled={!selectedSlot || isBooking}
                                 className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                Confirm Booking
+                                {isBooking ? 'Sending Request...' : 'Confirm Booking'}
                             </button>
                         </div>
                     ) : (
@@ -1361,10 +1390,7 @@ const App: React.FC = () => {
   const [postPage, setPostPage] = useState(1);
   const [hasMorePosts, setHasMorePosts] = useState(true);
   const [postsLoading, setPostsLoading] = useState(false);
-  const [essays, setEssays] = useState<Essay[]>([
-      { id: '1', collegeName: 'MIT', prompt: 'Tell us about a challenge...', content: '', lastEdited: new Date() },
-      { id: '2', collegeName: 'Stanford', prompt: 'What matters to you, and why?', content: '', lastEdited: new Date() }
-  ]);
+  const [essays, setEssays] = useState<Essay[]>([]);
   const [assistantChat, setAssistantChat] = useState<ChatMessage[]>([]);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantTyping, setAssistantTyping] = useState(false);
@@ -1373,6 +1399,7 @@ const App: React.FC = () => {
 
   // View States
   const [discoveryTab, setDiscoveryTab] = useState<DiscoveryTab>('details');
+  const [readinessTargetUniversity, setReadinessTargetUniversity] = useState('');
   const [trainingTab, setTrainingTab] = useState<'learn' | 'inspire' | 'expert'>('learn');
 
   // Forum Post State
@@ -1529,10 +1556,10 @@ const App: React.FC = () => {
   const handleReadinessAssessment = async () => {
       setIsTyping(true);
       setReadinessLoading(true);
-      const result = await Gemini.assessReadiness(profile);
+      const result = await Gemini.assessReadiness(profile, readinessTargetUniversity);
       try {
           const saved = await ReadinessService.saveReadiness(result);
-          setReadiness(saved);
+          setReadiness({ ...saved, targetUniversity: readinessTargetUniversity });
       } catch (error) {
           console.error('Failed to save readiness', error);
           setReadiness(result);
@@ -1751,12 +1778,17 @@ const App: React.FC = () => {
       return <LandingView onLogin={AuthService.googleLogin} />;
   }
 
+  // Determine if the current user is the true administrator.
+  const isTrueAdmin = user?.role === UserRole.ADMIN;
+
   return (
     <Layout 
       currentView={view} 
       onChangeView={setView} 
       userRole={role} 
-      onToggleRole={() => setRole(r => r === UserRole.STUDENT ? UserRole.ADMIN : UserRole.STUDENT)}
+      isTrueAdmin={isTrueAdmin}
+      // The S/A toggle function is only passed if the user is a true admin.
+      onToggleRole={isTrueAdmin ? () => setRole(r => r === UserRole.STUDENT ? UserRole.ADMIN : UserRole.STUDENT) : undefined}
       onLogout={AuthService.logout}
     >
       {/* Floating AI assistant toggle */}
@@ -1987,6 +2019,8 @@ const App: React.FC = () => {
                     readinessLoading={readinessLoading}
                     activeTab={discoveryTab}
                     setActiveTab={setDiscoveryTab}
+                    targetUniversity={readinessTargetUniversity}
+                    setTargetUniversity={setReadinessTargetUniversity}
                 />
             )
        )}
@@ -2042,7 +2076,7 @@ const App: React.FC = () => {
        )}
 
        {view === AppView.TRAINING && (
-           <TrainingView resources={MOCK_TRAINING} sampleProfiles={MOCK_SAMPLE_PROFILES} initialTab={trainingTab} profile={profile} />
+           <TrainingView resources={MOCK_TRAINING} sampleProfiles={MOCK_SAMPLE_PROFILES} initialTab={trainingTab} profile={profile} user={user} />
        )}
 
        {view === AppView.INTERVIEW && (
@@ -2065,13 +2099,15 @@ const App: React.FC = () => {
        )}
 
        {view === AppView.ADMIN && (
-           <div className="p-4 text-center text-gray-500">
-               <h2 className="text-xl font-bold text-gray-900 mb-4">Admin Console</h2>
-               <div className="bg-white p-6 rounded-xl border border-gray-200">
-                   <p>System Configuration & User Management</p>
-                   <p className="text-xs mt-2">(Restricted Access)</p>
+           role === UserRole.ADMIN ? (
+               <div className="p-4 text-center text-gray-500">
+                   <h2 className="text-xl font-bold text-gray-900 mb-4">Admin Console</h2>
+                   <div className="bg-white p-6 rounded-xl border border-gray-200">
+                       <p>System Configuration & User Management</p>
+                       <p className="text-xs mt-2">(Restricted Access)</p>
+                   </div>
                </div>
-           </div>
+           ) : null
        )}
     </Layout>
   );

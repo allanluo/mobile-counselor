@@ -12,6 +12,7 @@ const readinessRoutes = require('./routes/readiness.routes');
 const profileRoutes = require('./routes/profile.routes');
 const essayRoutes = require('./routes/essay.routes');
 const postRoutes = require('./routes/post.routes'); // Import post routes
+const bookingRoutes = require('./routes/booking.routes'); // Import booking routes
 const geminiController = require('./controllers/gemini.controller'); // Import the AI controller
 require('./config/passport-setup'); // This will run the passport configuration
 
@@ -56,6 +57,7 @@ app.use('/api/readiness', readinessRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/essays', essayRoutes);
 app.use('/api/posts', postRoutes); // Activate post routes
+app.use('/api/bookings', bookingRoutes); // Activate booking routes
 // Add the route for the Gemini proxy
 app.post('/api/gemini-proxy', geminiController.proxyRequest);
 
