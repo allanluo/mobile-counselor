@@ -982,7 +982,7 @@ const PlanningView: React.FC<{
 const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: SampleProfile[]; initialTab?: 'learn' | 'inspire' | 'expert'; profile: StudentProfile }> = ({ resources, sampleProfiles, initialTab = 'learn', profile }) => {
     const [tab, setTab] = useState<'learn' | 'inspire' | 'expert'>(initialTab);
     const [selectedProfile, setSelectedProfile] = useState<SampleProfile | null>(null);
-    const [successStories, setSuccessStories] = useState<SampleProfile[]>([]);
+    const [successStories, setSuccessStories] = useState<SampleProfile[]>(sampleProfiles);
     const [bookingCounselor, setBookingCounselor] = useState<HumanCounselor | null>(null);
     const [bookingStep, setBookingStep] = useState<'select' | 'success'>('select');
     const [selectedSlot, setSelectedSlot] = useState<string>('');
@@ -1017,7 +1017,7 @@ const TrainingView: React.FC<{ resources: TrainingResource[]; sampleProfiles: Sa
     }, [resources]);
 
     useEffect(() => {
-        setSuccessStories([]);
+        setSuccessStories(sampleProfiles || []);
     }, [sampleProfiles]);
 
     // Reset flow when modal closes
