@@ -25,8 +25,11 @@ app.set('trust proxy', 1);
 
 // --- CORS Configuration ---
 // This MUST be placed before your session and passport middleware and before your routes.
+const isProduction = process.env.NODE_ENV === 'production';
+const clientURL = isProduction ? 'http://icycorn.com' : 'http://localhost:3000';
+
 app.use(cors({
-  origin: 'http://localhost:3000', // The origin of your frontend app
+  origin: clientURL, // Dynamically set the origin
   credentials: true, // Allow cookies and authorization headers to be sent
 }));
 
@@ -38,9 +41,9 @@ app.use(session({
     saveUninitialized: false, // Don't create session until something stored
     cookie: {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        secure: isProduction, // Use secure cookies in production
         httpOnly: true, // Prevents client-side JS from accessing the cookie
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'lax' for localhost, 'none' for production
+        sameSite: isProduction ? 'lax' : 'lax', // 'lax' is generally safer. Use 'none' only if needed for cross-site contexts.
     }
   }));
   
