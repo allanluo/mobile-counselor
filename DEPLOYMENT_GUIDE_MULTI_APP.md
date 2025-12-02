@@ -85,19 +85,19 @@ Now, we'll set up Nginx to act as the reverse proxy.
 
 ## Step 3: Create Nginx Server Blocks
 
-We will create separate configuration files for each of your websites.
+We will use the `sites-available` and `sites-enabled` structure, which provides a clean way to manage multiple sites.
 
 1.  **Create a Config File for AdmissionAI**:
-    - Use `nano` to create a new configuration file for your new app.
+    - Use `nano` to create a new configuration file in `sites-available`.
     ```bash
-    sudo nano /etc/nginx/conf.d/admissionai.conf
+    sudo nano /etc/nginx/sites-available/admissionai
     ```
     - Paste the following configuration. **Replace `your-admission-ai-domain.com` with your actual domain name.**
 
     ```nginx
     server {
         listen 80;
-        server_name your-admission-ai-domain.com; # Your new app's domain
+        server_name your-admission-ai-domain.com;
 
         location / {
             proxy_pass http://localhost:5001; # Forward to the AdmissionAI app
@@ -111,26 +111,41 @@ We will create separate configuration files for each of your websites.
     ```
     - Save the file (`Ctrl+X`, `Y`, `Enter`).
 
-2.  **Create/Update Config for Your Existing App**:
-    - You need to do the same for your other application. Let's assume it runs on port `5000`.
+2.  **Enable the New Site**:
+    - Create a symbolic link from your config file in `sites-available` to the `sites-enabled` directory. This tells Nginx to use this configuration.
     ```bash
-    sudo nano /etc/nginx/conf.d/existing-app.conf
+    sudo ln -s /etc/nginx/sites-available/admissionai /etc/nginx/sites-enabled/
     ```
-    - Add a similar configuration. **Replace `your-existing-domain.com` and the port number.**
+
+3.  **Update Config for Your Existing App**:
+    - Your existing app should already have a similar file in `/etc/nginx/sites-available/`. If it's in `conf.d`, it's best to move it for consistency.
+    - Let's assume you need to create or move it. **Replace `your-existing-domain.com` and the port number.**
+    ```bash
+    sudo nano /etc/nginx/sites-available/existing-app
+    ```
+    - Add a similar configuration:
 
     ```nginx
     server {
         listen 80;
-        server_name your-existing-domain.com; # Your other app's domain
+        server_name your-existing-domain.com;
 
         location / {
             proxy_pass http://localhost:5000; # Forward to your existing app
-            # ... include the same proxy_set_header lines as above ...
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
         }
     }
     ```
+    - If you created a new file for your existing app, remember to enable it as well:
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/existing-app /etc/nginx/sites-enabled/
+    ```
 
-3.  **Test and Restart Nginx**:
+4.  **Test and Restart Nginx**:
     - It's vital to test your Nginx configuration for syntax errors before restarting.
     ```bash
     sudo nginx -t
