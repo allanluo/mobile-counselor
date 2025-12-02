@@ -101,11 +101,13 @@ We will use the `sites-available` and `sites-enabled` structure, which provides 
 
         location / {
             proxy_pass http://localhost:5001; # Forward to the AdmissionAI app
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
         }
     }
     ```
@@ -132,11 +134,13 @@ We will use the `sites-available` and `sites-enabled` structure, which provides 
 
         location / {
             proxy_pass http://localhost:5000; # Forward to your existing app
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_cache_bypass $http_upgrade;
         }
     }
     ```

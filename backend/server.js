@@ -42,8 +42,9 @@ app.use(session({
     cookie: {
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         secure: isProduction, // Use secure cookies in production
-        httpOnly: true, // Prevents client-side JS from accessing the cookie
-        sameSite: isProduction ? 'lax' : 'lax', // 'lax' is generally safer. Use 'none' only if needed for cross-site contexts.
+        httpOnly: true, // Prevents client-side JS from accessing the cookie,
+        proxy: true, // Add this line to trust the proxy for setting cookies
+        sameSite: isProduction ? 'lax' : 'lax'
     }
   }));
   
