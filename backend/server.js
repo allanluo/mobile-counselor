@@ -14,7 +14,6 @@ const essayRoutes = require('./routes/essay.routes');
 const postRoutes = require('./routes/post.routes'); // Import post routes
 const bookingRoutes = require('./routes/booking.routes'); // Import booking routes
 const geminiController = require('./controllers/gemini.controller'); // Import the AI controller
-require('./config/passport-setup'); // This will run the passport configuration
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -22,6 +21,9 @@ const PORT = process.env.PORT || 5000;
 // Trust the first proxy in front of the app. This is crucial for secure cookies in production.
 // It allows Express to correctly determine the protocol (http vs https) from headers like X-Forwarded-Proto.
 app.set('trust proxy', 1);
+
+// Now that the app trusts the proxy, we can configure passport.
+require('./config/passport-setup'); // This will run the passport configuration
 
 // --- CORS Configuration ---
 // This MUST be placed before your session and passport middleware and before your routes.
